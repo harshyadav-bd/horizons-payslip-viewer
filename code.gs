@@ -11,38 +11,40 @@ function doGet() {
 function scanEmails() {
   try {
     const sheet = SpreadsheetApp.openById(SHEET_ID).getActiveSheet();
-    
     // Clear existing data
     if (sheet.getLastRow() > 1) {
       sheet.getRange('A2:B' + sheet.getLastRow()).clear();
     }
-    
+
     let row = 2;
     let processedCount = 0;
     const threads = GmailApp.search(SEARCH_QUERY);
-    
+
     if (!threads || threads.length === 0) {
       return 'No emails found matching the search criteria.';
     }
-    
+
     threads.forEach(thread => {
+      // Get all messages in the thread instead of just the first one
       const messages = thread.getMessages();
-      const message = messages[0];
-      const subject = message.getSubject();
-      const body = message.getPlainBody();
       
-      const monthMatch = subject.match(/Horizons - Payslip for (\w+ \d{4})/);
-      const nameMatch = body.match(/Hi (\w+)/);
-      
-      if (monthMatch && nameMatch) {
-        // Store exact matched values
-        sheet.getRange(row, 1).setValue(nameMatch[1].trim());
-        sheet.getRange(row, 2).setValue(monthMatch[1].trim());
-        row++;
-        processedCount++;
-      }
+      // Process each message in the thread
+      messages.forEach(message => {
+        const subject = message.getSubject();
+        const body = message.getPlainBody();
+        const monthMatch = subject.match(/Horizons - Payslip for (\w+ \d{4})/);
+        const nameMatch = body.match(/Hi (\w+)/);
+
+        if (monthMatch && nameMatch) {
+          // Store exact matched values
+          sheet.getRange(row, 1).setValue(nameMatch[1].trim());
+          sheet.getRange(row, 2).setValue(monthMatch[1].trim());
+          row++;
+          processedCount++;
+        }
+      });
     });
-    
+
     return `Scan complete. Processed ${processedCount} emails.`;
   } catch (error) {
     Logger.log('Error in scanEmails: ' + error.toString());
@@ -77,19 +79,24 @@ function getMonths() {
 function getEmployeesByMonth(month) {
   try {
     if (!month) return [];
-    
     const sheet = SpreadsheetApp.openById(SHEET_ID).getActiveSheet();
     if (sheet.getLastRow() <= 1) return [];
     
     const data = sheet.getRange('A2:B' + sheet.getLastRow()).getValues();
-    const employees = data
-      .filter(row => row[1].toString().trim() === month.toString().trim())
-      .map(row => row[0].toString().trim())
-      .filter(name => name !== '')
-      .sort();
+    
+    // Use Set to get unique employee names
+    const uniqueEmployees = new Set(
+      data
+        .filter(row => row[1].toString().trim() === month.toString().trim())
+        .map(row => row[0].toString().trim())
+        .filter(name => name !== '')
+    );
+    
+    // Convert Set back to sorted array
+    const employees = Array.from(uniqueEmployees).sort();
     
     Logger.log('Month requested: ' + month);
-    Logger.log('Employees found: ' + JSON.stringify(employees));
+    Logger.log('Unique employees found: ' + JSON.stringify(employees));
     
     return employees;
   } catch (error) {
